@@ -1,13 +1,29 @@
 {
-  "name": "distributed-job-queue-platform", "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "name": "distributed-job-queue-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "build": "npm run build -w @queue/api && npm run build -w @queue/web",
     "typecheck": "npm run typecheck -w @queue/api && npm run typecheck -w @queue/web",
-    "test": "vitest run", "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:smoke": "playwright test", "db:generate": "npm run generate -w @queue/db",
-    "db:migrate": "npm run migrate -w @queue/db", "dev:api": "npm run dev -w @queue/api",
-    "dev:worker": "npm run worker -w @queue/api", "dev:web": "npm run dev -w @queue/web"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:smoke": "playwright test",
+    "db:generate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js generate --schema packages/db/prisma/schema.prisma",
+    "db:migrate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate deploy --schema packages/db/prisma/schema.prisma",
+    "dev:api": "npm run dev -w @queue/api",
+    "dev:worker": "npm run worker -w @queue/api",
+    "dev:web": "npm run dev -w @queue/web"
   },
-  "devDependencies": { "@playwright/test": "^1.56.0", "@types/node": "^22.0.0", "typescript": "^5.9.0", "vitest": "^3.2.0", "tsx": "^4.20.0", "@types/supertest": "^6.0.0", "supertest": "^7.1.0" }
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "tsx": "^4.20.0",
+    "@types/supertest": "^6.0.0",
+    "supertest": "^7.1.0"
+  }
 }

@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+model Job {
+  id             String    @id @default(uuid()) @db.Uuid
+  type           String
+  payload        Json
+  fingerprint    String
+  idempotencyKey String?   @unique
+  status         JobStatus @default(queued)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  backoffMs      Int       @default(1000)
+  scheduledAt    DateTime  @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  runToken       String?   @db.Uuid
+  result         Json?
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  history        JobEvent[]
+  outbox         Outbox?
+  deadLetter     DeadLetter?
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@index([createdAt, id])
+}
+model JobEvent {
+  id        Int      @id @default(autoincrement())
+  jobId     String   @db.Uuid
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind      String
+  attempt   Int      @default(0)
+  message   String?
+  createdAt DateTime @default(now())
+  @@index([jobId, id])
+}
+model Outbox {
+  jobId       String    @id @db.Uuid
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  @@index([publishedAt, createdAt])
+}
+model DeadLetter {
+  jobId       String    @id @db.Uuid
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reason      String
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
+  @@index([deliveredAt, createdAt])
+}
