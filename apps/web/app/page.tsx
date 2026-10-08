@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [listing, setListing] = useState<Listing>({ jobs: [], total: 0, pages: 0 }), [metrics, setMetrics] = useState<Metrics | null>(null), [ready, setReady] = useState('Checking');
   const [page, setPage] = useState(1), [status, setStatus] = useState(''), [filterType, setFilterType] = useState(''), [deadLetter, setDeadLetter] = useState(false);
   const [type, setType] = useState('echo'), [payload, setPayload] = useState(JSON.stringify(examples.echo, null, 2)), [attempts, setAttempts] = useState(3), [backoff, setBackoff] = useState(1000), [runAt, setRunAt] = useState(''), [key, setKey] = useState('');
+  const liveDemoEnabled = process.env.NEXT_PUBLIC_DEMO_ENABLED === 'true';
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '10' });
@@ -30,6 +31,12 @@ export default function Dashboard() {
     try { await api('session', { method: 'POST', body: JSON.stringify({ token }) }); setToken(''); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Sign in failed'); } finally { setBusy(false); }
   }
+  async function liveDemo() {
+    setBusy(true); setError('');
+    try { await api('session', { method: 'POST', body: JSON.stringify({ demo: true }) }); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Live demo sign in failed'); }
+    finally { setBusy(false); }
+  }
   async function enqueue(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
@@ -42,7 +49,7 @@ export default function Dashboard() {
     <header><h1>Distributed Job Queue</h1>{signedIn && <button onClick={async () => { try { await api('session', { method: 'DELETE' }); setSignedIn(false); setNotice(''); } catch (e) { setError((e as Error).message); } }}>Sign out</button>}</header>
     <p className="muted">Demo handlers only. Jobs may execute again after a worker failure; use idempotent handlers for external effects.</p>
     {error && <p className="error" role="alert">{error}</p>}
-    {checking ? <p>Loading…</p> : !signedIn ? <form onSubmit={login}><h2>Demo sign in</h2><p>Enter DEMO_API_TOKEN from your local environment.</p><div className="fields"><label>Demo token<input type="password" value={token} onChange={e => setToken(e.target.value)} required autoComplete="current-password" /></label><button disabled={busy}>Sign in</button></div></form> : <>
+    {checking ? <p>Loading…</p> : !signedIn ? <form onSubmit={login}><h2>Demo sign in</h2>{liveDemoEnabled ? <><p>Try the shared live queue demo. Everyone sees the same sample jobs.</p><button type="button" onClick={() => void liveDemo()} disabled={busy}>{busy ? 'Waking demo…' : 'Try live demo'}</button><p className="muted">The free backend may be asleep and can take about a minute to wake up.</p><hr /></> : <p>Enter DEMO_API_TOKEN from your local environment.</p>}<div className="fields"><label>Demo token<input type="password" value={token} onChange={e => setToken(e.target.value)} required autoComplete="current-password" /></label><button disabled={busy}>Sign in</button></div></form> : <>
       <h2>Metrics</h2>
       <p>Service: {ready}. Active workers: {metrics?.workers ?? 0}. Dispatcher: {metrics?.dispatcher ? 'online' : 'offline'}.</p>
       <div className="metrics">{Object.entries(metrics?.states ?? {}).map(([state, count]) => <span key={state}>{state}: <strong>{count}</strong></span>)}<span>dead letters: <strong>{metrics?.deadLetters ?? 0}</strong></span><span>pending dispatch: <strong>{metrics?.pendingDispatch ?? 0}</strong></span><span>mean execution: {metrics?.averageDurationMs == null ? '—' : `${Math.round(metrics.averageDurationMs)} ms`}</span></div>

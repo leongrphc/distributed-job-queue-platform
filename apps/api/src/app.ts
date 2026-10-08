@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import helmet from 'helmet';
 import { rateLimit, type Store } from 'express-rate-limit';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { Prisma } from '@queue/db';
 import { db } from './db.js';
 import { config } from './config.js';
@@ -34,7 +35,17 @@ export function createApp(deps: Dependencies) {
       res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'waiting', database: true, redis: true, ...coordination });
     } catch { res.status(503).json({ status: 'unavailable' }); }
   });
-  app.use('/api', rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, store: deps.rateStore, message: { error: 'Rate limit exceeded' } }));
+  app.use('/api', (req, res, next) => {
+    if (!config.API_GATEWAY_SECRET) return next();
+    const actual = Buffer.from(req.get('x-queue-gateway-secret') ?? '');
+    const expected = Buffer.from(config.API_GATEWAY_SECRET);
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return res.status(403).json({ error: 'Forbidden' });
+    const clientIp = req.get('x-queue-client-ip');
+    if (!clientIp || !isIP(clientIp)) return res.status(400).json({ error: 'Invalid client address' });
+    Object.defineProperty(req, 'ip', { configurable: true, value: clientIp });
+    next();
+  });
+  app.use('/api', rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, store: deps.rateStore, validate: { xForwardedForHeader: !config.API_GATEWAY_SECRET }, message: { error: 'Rate limit exceeded' } }));
   app.use('/api', (req, _res, next) => {
     const received = Buffer.from(req.headers.authorization ?? '');
     const expected = Buffer.from(`Bearer ${config.DEMO_API_TOKEN}`);

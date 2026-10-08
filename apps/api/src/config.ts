@@ -9,5 +9,7 @@ const schema = z.object({
   QUEUE_PREFIX: z.string().regex(/^[a-zA-Z0-9_-]+$/).default('djqp'),
   WORKER_LOCK_MS: z.coerce.number().int().min(1000).default(15000),
   STALLED_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
+  API_GATEWAY_SECRET: z.string().min(32).optional(),
 });
 export const config = schema.parse(process.env);
+if (process.env.RENDER === 'true' && !config.API_GATEWAY_SECRET) throw new Error('API gateway secret is required on Render');

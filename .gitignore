@@ -2,6 +2,9 @@ node_modules
 .next/
 dist/
 .env
+.env.*
+!.env.example
+.vercel/
 *.tsbuildinfo
 coverage/
 playwright-report/
@@ -9,3 +12,4 @@ test-results/
 .logs/
 
 .local/
+.vercel

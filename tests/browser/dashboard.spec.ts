@@ -5,9 +5,13 @@ test('sign in, enqueue, inspect result and sign out', async ({ page, context, re
   expect((await request.post('/api/session', { headers: { Origin: 'https://evil.example' }, data: { token: process.env.DEMO_API_TOKEN } })).status()).toBe(403);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
-  await page.getByLabel('Demo token').fill(process.env.DEMO_API_TOKEN!);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    await page.getByRole('button', { name: 'Try live demo', exact: true }).click();
+  } else {
+    await page.getByLabel('Demo token').fill(process.env.DEMO_API_TOKEN!);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  }
+  await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible({ timeout: 110000 });
   const session = (await context.cookies()).find(c => c.name === 'demo_session');
   expect(session?.httpOnly).toBe(true); expect(session?.sameSite).toBe('Strict');
   expect(await page.evaluate(() => document.cookie)).not.toContain('demo_session');

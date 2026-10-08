@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: distributed-job-queue-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: QUEUE_PREFIX
+        value: djqp-live
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: DEMO_API_TOKEN
+        sync: false
+      - key: API_GATEWAY_SECRET
+        sync: false
