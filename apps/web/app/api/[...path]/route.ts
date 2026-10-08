@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sameOrigin, upstream, unavailable } from '../../../lib/proxy';
+import { sameOrigin, upstream, unavailable, boundedBody, BodyTooLarge } from '../../../lib/proxy';
 async function proxy(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   if (req.method !== 'GET' && !sameOrigin(req)) return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
   const token = req.cookies.get('demo_session')?.value;
@@ -11,12 +11,15 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
   try {
     const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const key = req.headers.get('idempotency-key'); if (key) headers['Idempotency-Key'] = key;
-    const response = await upstream(`${path === 'ready' ? '/ready' : `/api/${path}`}${req.nextUrl.search}`, { method: req.method, headers, ...(req.method === 'POST' ? { body: await req.text() } : {}) });
+    const response = await upstream(`${path === 'ready' ? '/ready' : `/api/${path}`}${req.nextUrl.search}`, { method: req.method, headers, ...(req.method === 'POST' ? { body: await boundedBody(req, 32768) } : {}) });
     const body = await response.text();
     const result = new NextResponse(body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
     for (const name of ['ratelimit', 'ratelimit-policy', 'retry-after', 'x-request-id']) { const value = response.headers.get(name); if (value) result.headers.set(name, value); }
     return result;
-  } catch { return unavailable(); }
+  } catch (error) {
+    if (error instanceof BodyTooLarge) return NextResponse.json({ error: 'Request too large' }, { status: 413 });
+    return unavailable();
+  }
 }
 export const GET = proxy;
 export const POST = proxy;

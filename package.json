@@ -7,23 +7,28 @@
   ],
   "scripts": {
     "build": "npm run build -w @queue/api && npm run build -w @queue/web",
-    "typecheck": "npm run typecheck -w @queue/api && npm run typecheck -w @queue/web",
+    "typecheck": "npm run db:generate && npm run typecheck -w @queue/api && npm run typecheck -w @queue/web",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:smoke": "playwright test",
+    "test:integration": "node --env-file-if-exists=.env scripts/integration.mjs",
+    "test:smoke": "npm run build && playwright test",
     "db:generate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js generate --schema packages/db/prisma/schema.prisma",
     "db:migrate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate deploy --schema packages/db/prisma/schema.prisma",
     "dev:api": "npm run dev -w @queue/api",
     "dev:worker": "npm run worker -w @queue/api",
-    "dev:web": "npm run dev -w @queue/web"
+    "dev:web": "node --env-file-if-exists=.env scripts/web-dev.mjs",
+    "verify": "npm run typecheck && npm test && npm run test:integration && npm run test:smoke"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0",
+    "vitest": "^5.0.3",
     "tsx": "^4.20.0",
     "@types/supertest": "^6.0.0",
     "supertest": "^7.1.0"
-  }
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
+  },
+  "type": "module"
 }

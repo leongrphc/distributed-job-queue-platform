@@ -1,4 +1,5 @@
 x-app: &app
+  image: distributed-job-queue-platform:local
   build: .
   environment: &env
     DATABASE_URL: postgresql://queue:queue@postgres:5432/queue?schema=public
@@ -26,6 +27,7 @@ services:
     volumes: ["redis-data:/data"]
     healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20}
   migrate:
+    image: distributed-job-queue-platform:local
     build: .
     environment:
       DATABASE_URL: postgresql://queue:queue@postgres:5432/queue?schema=public
@@ -48,6 +50,7 @@ services:
     environment:
       <<: *env
       API_URL: http://api:4000
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
     command: ["npm", "run", "start", "-w", "@queue/web"]
     ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
 volumes:

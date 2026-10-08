@@ -15,7 +15,10 @@ worker.on('stalled', jobId => { logger.warn({ jobId, event: 'stalled' }, 'expire
 worker.on('failed', job => { logger.warn({ jobId: job?.id, event: 'failed' }, 'queue attempt failed'); });
 let stopping = false;
 let heartbeatTask: Promise<void> = Promise.resolve();
+let heartbeatRunning = false;
 const beat = () => {
+  if (heartbeatRunning || stopping) return;
+  heartbeatRunning = true;
   heartbeatTask = (async () => {
     try {
       if (worker.isRunning() && !stopping) {
@@ -23,6 +26,7 @@ const beat = () => {
         await heartbeatRedis.zadd(`${config.QUEUE_PREFIX}:workers`, Date.now(), workerId);
       }
     } catch { logger.warn({ code: 'WORKER_HEARTBEAT_FAILED' }, 'worker heartbeat failed'); }
+    finally { heartbeatRunning = false; }
   })();
 };
 beat();

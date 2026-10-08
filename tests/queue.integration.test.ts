@@ -37,6 +37,8 @@ afterAll(async () => {
   for (const child of children) if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await once(child, 'exit'); }
   await worker.close();
   await queues.jobs.obliterate({ force: true }); await queues.dead.obliterate({ force: true });
+  const keys = await queues.connection.keys(`${config.QUEUE_PREFIX}:*`);
+  if (keys.length) await queues.connection.del(...keys);
   await queues.close(); await db.job.deleteMany({ where: { id: { in: ids } } }); await db.$disconnect();
 });
 describe('Redis queue and worker', () => {
@@ -97,4 +99,49 @@ describe('Redis queue and worker', () => {
     const recovered = await waitFor(() => db.job.findUniqueOrThrow({ where: { id } }), j => j.status === 'succeeded');
     expect(recovered.attempts).toBe(2);
   });
+  it('drains an active job on SIGTERM and exits cleanly', async () => {
+    await worker.close();
+    const child = spawn(process.execPath, ['--import', 'tsx', 'apps/api/src/worker.ts'], {
+      env: { ...process.env, QUEUE_PREFIX: config.QUEUE_PREFIX, WORKER_CONCURRENCY: '1', LOG_LEVEL: 'silent' }, stdio: 'ignore',
+    }); children.push(child);
+    const id = await enqueue({ type: 'sleep', payload: { durationMs: 500 } }); await dispatch();
+    await waitFor(() => db.job.findUniqueOrThrow({ where: { id } }), j => j.status === 'running');
+    child.kill('SIGTERM'); const [code] = await once(child, 'exit');
+    expect(code).toBe(0); expect((await db.job.findUniqueOrThrow({ where: { id } })).status).toBe('succeeded');
+    worker = startWorker(); await worker.waitUntilReady();
+  });
+
+  it('dead-letters a crashed claim when no execution budget remains', async () => {
+    await worker.close();
+    const child = spawn(process.execPath, ['--import', 'tsx', 'apps/api/src/worker.ts'], {
+      env: { ...process.env, QUEUE_PREFIX: config.QUEUE_PREFIX, WORKER_CONCURRENCY: '1', WORKER_LOCK_MS: '1000', STALLED_INTERVAL_MS: '1000', LOG_LEVEL: 'silent' }, stdio: 'ignore',
+    }); children.push(child);
+    const id = await enqueue({ type: 'sleep', payload: { durationMs: 3000 }, maxAttempts: 1 }); await dispatch();
+    await waitFor(() => db.job.findUniqueOrThrow({ where: { id } }), j => j.status === 'running');
+    child.kill('SIGKILL'); await once(child, 'exit');
+    worker = startWorker(); await worker.waitUntilReady();
+    const job = await waitFor(() => db.job.findUniqueOrThrow({ where: { id }, include: { deadLetter: true } }), j => j.status === 'failed');
+    expect(job.attempts).toBe(1); expect(job.deadLetter).not.toBeNull();
+    await dispatch(); expect(await queues.dead.getJob(id)).toBeDefined();
+  });
+
+  it('reconciles a terminal Redis stall failure into PostgreSQL and the DLQ', async () => {
+    await worker.close();
+    const id = await enqueue({ type: 'sleep', payload: { durationMs: 30000 }, maxAttempts: 10 }); await dispatch();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const child = spawn(process.execPath, ['--import', 'tsx', 'apps/api/src/worker.ts'], {
+        env: { ...process.env, QUEUE_PREFIX: config.QUEUE_PREFIX, WORKER_CONCURRENCY: '1', WORKER_LOCK_MS: '1000', STALLED_INTERVAL_MS: '1000', LOG_LEVEL: 'silent' }, stdio: 'ignore',
+      }); children.push(child);
+      await waitFor(() => db.job.findUniqueOrThrow({ where: { id } }), j => j.attempts === attempt && j.status === 'running');
+      child.kill('SIGKILL'); await once(child, 'exit');
+    }
+    worker = startWorker(); await worker.waitUntilReady();
+    await waitFor(async () => (await queues.jobs.getJob(id))?.getState(), s => s === 'failed');
+    await dispatch();
+    const job = await db.job.findUniqueOrThrow({ where: { id }, include: { deadLetter: true } });
+    expect(job.status).toBe('failed'); expect(job.attempts).toBe(3);
+    expect(job.deadLetter?.reason).toContain('lease recovery exhausted');
+    expect(await queues.dead.getJob(id)).toBeDefined();
+  });
+
 });
