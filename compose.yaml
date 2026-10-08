@@ -1,0 +1,55 @@
+x-app: &app
+  build: .
+  environment: &env
+    DATABASE_URL: postgresql://queue:queue@postgres:5432/queue?schema=public
+    REDIS_URL: redis://redis:6379
+    DEMO_API_TOKEN: ${DEMO_API_TOKEN:-local-demo-token-change-me}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+    migrate: {condition: service_completed_successfully}
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 35s
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment: {POSTGRES_USER: queue, POSTGRES_PASSWORD: queue, POSTGRES_DB: queue}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U queue"], interval: 5s, timeout: 3s, retries: 20}
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20}
+  migrate:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://queue:queue@postgres:5432/queue?schema=public
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+  api:
+    <<: *app
+    ports: ["127.0.0.1:4000:4000"]
+    healthcheck: {test: ["CMD", "curl", "-f", "http://localhost:4000/ready"], interval: 10s, timeout: 3s, retries: 10}
+  dispatcher:
+    <<: *app
+    command: ["node", "apps/api/dist/dispatcher.js"]
+  worker:
+    <<: *app
+    command: ["node", "apps/api/dist/worker.js"]
+  web:
+    <<: *app
+    environment:
+      <<: *env
+      API_URL: http://api:4000
+    command: ["npm", "run", "start", "-w", "@queue/web"]
+    ports: ["127.0.0.1:3000:3000"]
+volumes:
+  postgres-data:
+  redis-data:
