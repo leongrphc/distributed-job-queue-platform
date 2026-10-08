@@ -1,5 +1,11 @@
 # Distributed Job Queue Platform
 
+[Canlı demo / Live demo](https://distributed-job-queue-alpha.vercel.app) · [Hosting details](docs/deployment.md)
+
+Demo için **Try live demo** düğmesini kullanın. Ortak bir portföy demosudur; kişisel veri göndermeyin. Ücretsiz backend boşta kalınca uyur, ilk açılış yaklaşık bir dakika sürebilir.
+
+Use **Try live demo** to enter the shared portfolio dashboard. Do not submit personal data. The free backend sleeps when idle; the first visit can take about a minute.
+
 [🇹🇷 Türkçe](#türkçe) · [🇬🇧 English](#english)
 
 ---
@@ -162,7 +168,7 @@ Test kapsamı: queue davranışı, retry/backoff, idempotency, concurrency, canc
 - Dead-letter redrive arayüzü henüz yoktur.
 - Global rate limiting için güvenilir proxy yapılandırması gerekir.
 - Gerçek e-posta, push notification veya dış servis entegrasyonu yoktur.
-- Production deployment ve yüksek hacimli load testleri bu sürümün kapsamı dışındadır.
+- Canlı kurulum bir portföy demosudur; üretim SLA'sı ve yüksek hacimli load testleri bu sürümün kapsamı dışındadır.
 
 [English bölümüne geç](#english) · [Başa dön](#distributed-job-queue-platform)
 
@@ -326,6 +332,6 @@ Coverage includes queue semantics, retry/backoff, idempotency, concurrency, canc
 - A dead-letter redrive interface is not included yet.
 - Global rate limiting requires a trusted proxy configuration.
 - No real email, push notification, or external provider integration is included.
-- Production deployment and high-volume load testing are outside the current scope.
+- The hosted deployment is a portfolio demo; production SLAs and high-volume load testing are outside the current scope.
 
 [Back to top](#distributed-job-queue-platform) · [Türkçe bölümüne dön](#türkçe)

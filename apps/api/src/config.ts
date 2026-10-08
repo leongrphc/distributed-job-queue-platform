@@ -9,6 +9,8 @@ const schema = z.object({
   QUEUE_PREFIX: z.string().regex(/^[a-zA-Z0-9_-]+$/).default('djqp'),
   WORKER_LOCK_MS: z.coerce.number().int().min(1000).default(15000),
   STALLED_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
+  DEMO_MAX_JOBS: z.coerce.number().int().min(0).default(0),
+  DEMO_RETENTION_HOURS: z.coerce.number().int().min(0).default(0),
   API_GATEWAY_SECRET: z.string().min(32).optional(),
 });
 export const config = schema.parse(process.env);

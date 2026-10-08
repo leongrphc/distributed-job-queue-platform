@@ -6,15 +6,23 @@ import { db } from './db.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { installShutdown } from './lifecycle.js';
+import { runDemoMaintenance } from './demo-maintenance.js';
 const queues = createQueues();
 const redis = createRedis();
 const dispatch = createDispatcher(queues);
 const owner = randomUUID();
 let stopping = false;
 let wake: (() => void) | undefined;
+let lastMaintenance = 0;
 const loop = (async () => {
   while (!stopping) {
-    try { await dispatch(); await redis.set(`${config.QUEUE_PREFIX}:dispatcher`, owner, 'PX', 15000); }
+    try {
+      if (config.DEMO_RETENTION_HOURS > 0 && Date.now() - lastMaintenance >= 60000) {
+        lastMaintenance = Date.now();
+        await runDemoMaintenance({ jobs: queues.jobs, dead: queues.dead });
+      }
+      await dispatch(); await redis.set(`${config.QUEUE_PREFIX}:dispatcher`, owner, 'PX', 15000);
+    }
     catch { logger.error({ code: 'DISPATCH_FAILED' }, 'dispatch iteration failed'); }
     if (!stopping) await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); wake = () => { clearTimeout(timer); resolve(); }; });
   }

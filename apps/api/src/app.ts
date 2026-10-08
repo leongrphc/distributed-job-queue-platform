@@ -64,15 +64,33 @@ export function createApp(deps: Dependencies) {
     const idempotencyKey = key?.success ? key.data : undefined;
     const hash = fingerprint(input);
     try {
-      const job = await db.job.create({ data: {
-        type: input.type, payload: input.payload as Prisma.InputJsonValue, fingerprint: hash, idempotencyKey,
-        maxAttempts: input.maxAttempts, backoffMs: input.backoffMs,
-        scheduledAt: input.runAt ? new Date(input.runAt) : undefined,
-        history: { create: { kind: 'queued', message: input.runAt ? 'Scheduled job accepted' : 'Job accepted' } },
-        outbox: { create: {} },
-      } });
-      res.status(201).json({ job, replayed: false });
+      const result = await db.$transaction(async tx => {
+        // Serialize admission checks across API instances. This lock is only
+        // taken when the bounded demo mode is enabled.
+        if (config.DEMO_MAX_JOBS > 0) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('distributed-job-demo-capacity', 0))`;
+        if (idempotencyKey) {
+          const existing = await tx.job.findUnique({ where: { idempotencyKey } });
+          if (existing) {
+            if (existing.fingerprint !== hash) throw new HttpError(409, 'Idempotency key already used for a different request');
+            return { job: existing, replayed: true as const };
+          }
+        }
+        if (config.DEMO_MAX_JOBS > 0) {
+          const count = await tx.job.count();
+          if (count >= config.DEMO_MAX_JOBS) throw new HttpError(429, 'Demo capacity reached; try again later');
+        }
+        const job = await tx.job.create({ data: {
+          type: input.type, payload: input.payload as Prisma.InputJsonValue, fingerprint: hash, idempotencyKey,
+          maxAttempts: input.maxAttempts, backoffMs: input.backoffMs,
+          scheduledAt: input.runAt ? new Date(input.runAt) : undefined,
+          history: { create: { kind: 'queued', message: input.runAt ? 'Scheduled job accepted' : 'Job accepted' } },
+          outbox: { create: {} },
+        } });
+        return { job, replayed: false as const };
+      });
+      res.status(result.replayed ? 200 : 201).json(result);
     } catch (error) {
+      if (error instanceof HttpError) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && idempotencyKey) {
         const job = await db.job.findUniqueOrThrow({ where: { idempotencyKey } });
         if (job.fingerprint !== hash) throw new HttpError(409, 'Idempotency key already used for a different request');

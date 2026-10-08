@@ -17,6 +17,10 @@ services:
         value: "2"
       - key: QUEUE_PREFIX
         value: djqp-live
+      - key: DEMO_MAX_JOBS
+        value: "1000"
+      - key: DEMO_RETENTION_HOURS
+        value: "24"
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_URL_UNPOOLED
